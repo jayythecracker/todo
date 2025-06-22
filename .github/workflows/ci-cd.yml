@@ -2,21 +2,21 @@ name: 🚀 CI/CD Pipeline
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main, develop]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 env:
-  NODE_VERSION: '18'
-  MONGODB_VERSION: '6.0'
-  REDIS_VERSION: '7'
+  NODE_VERSION: "18"
+  MONGODB_VERSION: "6.0"
+  REDIS_VERSION: "7"
 
 jobs:
   # ✅ SENIOR APPROACH: Comprehensive testing pipeline
   test:
     name: 🧪 Test Suite
     runs-on: ubuntu-latest
-    
+
     services:
       # MongoDB service
       mongodb:
@@ -28,7 +28,7 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-      
+
       # Redis service
       redis:
         image: redis:7-alpine
@@ -48,7 +48,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
+          cache: "npm"
           cache-dependency-path: |
             server/package-lock.json
             client/package-lock.json
@@ -136,10 +136,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: [test, security]
     if: github.ref == 'refs/heads/develop'
-    
-    environment:
-      name: staging
-      url: https://your-app-staging.vercel.app
 
     steps:
       - name: 📥 Checkout code
@@ -159,10 +155,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: [test, security]
     if: github.ref == 'refs/heads/main'
-    
-    environment:
-      name: production
-      url: https://your-app.vercel.app
 
     steps:
       - name: 📥 Checkout code
@@ -174,7 +166,7 @@ jobs:
           vercel-token: ${{ secrets.VERCEL_TOKEN }}
           vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
           vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-          vercel-args: '--prod'
+          vercel-args: "--prod"
           working-directory: ./server
           scope: ${{ secrets.VERCEL_ORG_ID }}
 
@@ -198,7 +190,7 @@ jobs:
         uses: 8398a7/action-slack@v3
         with:
           status: ${{ job.status }}
-          channel: '#deployments'
+          channel: "#deployments"
           text: |
             🚀 Deployment Status: ${{ job.status }}
             📦 Commit: ${{ github.sha }}

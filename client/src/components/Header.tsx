@@ -2,7 +2,7 @@ import React from "react";
 import { useAuth } from "../contexts/AuthContext";
 
 const Header: React.FC = () => {
-  const { user, logout, isAuthenticated, hasRole } = useAuth();
+  const { user, logout, isAuthenticated } = useAuth();
 
   const getRoleBadge = (role: string) => {
     const badges = {

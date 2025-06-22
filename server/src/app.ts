@@ -7,7 +7,7 @@ dotenv.config({
 });
 
 // Now import everything else
-import express from "express";
+import express, { Request, Response } from "express";
 import cookieParser from "cookie-parser";
 import { connectDB } from "./db/connectDB";
 import { redisClient } from "./config/redis";
