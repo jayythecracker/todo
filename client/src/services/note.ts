@@ -1,12 +1,11 @@
 // services/note.ts
 import type { Note } from "../types/note";
-import axios from "axios";
+import authApi from "./auth";
 
 export const getNotes = async (): Promise<Note[]> => {
-  console.log("API_URL:", import.meta.env.VITE_API_URL);
-
   try {
-    const response = await axios.get(`${import.meta.env.VITE_API_URL}/`);
+    // Use the todo routes (assuming they're at the root level)
+    const response = await authApi.get("/todos");
     console.log("API Response:", response.data);
     return response.data.data;
   } catch (error) {
@@ -21,10 +20,7 @@ export const createNote = async (noteData: {
   todo: string;
 }): Promise<Note> => {
   try {
-    const response = await axios.post(
-      `${import.meta.env.VITE_API_URL}/create`,
-      noteData
-    );
+    const response = await authApi.post("/todos/create", noteData);
     console.log("Note created:", response.data);
     return response.data; // Return the created note
   } catch (error) {
@@ -35,28 +31,24 @@ export const createNote = async (noteData: {
 
 export const deleteNote = async (id: string): Promise<Note> => {
   try {
-    const response = await axios.delete(
-      `${import.meta.env.VITE_API_URL}/${id}`
-    );
+    const response = await authApi.delete(`/todos/${id}`);
     return response.data;
   } catch (error) {
-    console.error("Error creating note:", error);
+    console.error("Error deleting note:", error);
     throw error;
   }
 };
 
 export const updateTodo = async (noteData: {
-    id:string
+  id: string;
   title: string;
   todo: string;
 }): Promise<Note> => {
   try {
-    const response = await axios.patch(
-      `${import.meta.env.VITE_API_URL}/`,noteData
-    );
+    const response = await authApi.patch("/todos/", noteData);
     return response.data;
   } catch (error) {
-    console.error("Error creating note:", error);
+    console.error("Error updating note:", error);
     throw error;
   }
 };

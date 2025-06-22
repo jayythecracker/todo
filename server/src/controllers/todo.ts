@@ -1,52 +1,144 @@
 import { Request, Response } from "express";
 import { Todo } from "../models/todo";
-export const createTdo = async (req: Request, res: Response) => {
-  try {
-    const { title, todo } = req.body;
-    const newTodo = await Todo.create({
-      title,
-      todo,
-    });
-    res.status(201).json({ message: "New Todo created!", data: newTodo });
-  } catch (error) {
-    res.status(500).json({ message: error });
-  }
-};
+import { TodoCacheService } from "../services/todoCache";
+import {
+  AuthenticationError,
+  NotFoundError,
+  ValidationError,
+  asyncHandler,
+} from "../middlewares/errorHandler";
+// Import the global type augmentation
+import "../types/express";
 
-export const getAll = async (req: Request, res: Response) => {
-  try {
-    const todos = await Todo.find({});
+// ✅ SENIOR APPROACH: Clean controller with global error handling
+export const createTdo = asyncHandler(async (req: Request, res: Response) => {
+  const { title, todo } = req.body;
+
+  // ✅ SENIOR APPROACH: Use custom error classes
+  if (!req.userId) {
+    throw new AuthenticationError("Authentication required");
+  }
+
+  if (!title || !todo) {
+    throw new ValidationError("Title and todo content are required");
+  }
+
+  const userId = req.userId;
+
+  const newTodo = await Todo.create({
+    title,
+    todo,
+    createdBy: userId,
+  });
+
+  // ✅ REDIS USE CASE: Invalidate cache when new todo is created
+  await TodoCacheService.invalidateUserTodos(userId);
+
+  res.status(201).json({
+    success: true,
+    message: "New Todo created!",
+    data: newTodo,
+  });
+});
+
+export const getAll = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    // ✅ SENIOR APPROACH: Type-safe access with null check
+    if (!req.userId) {
+      throw new AuthenticationError("Authentication required");
+    }
+
+    // ✅ REDIS USE CASE: Get todos with caching
+    const todos = await TodoCacheService.getTodosWithCache(req.userId);
     res.status(200).json({ message: "All Todos", data: todos });
-  } catch (error) {
-    res.status(500).json({ message: error });
   }
-};
+);
 
-export const deleteTodo = async (req: Request, res: Response) => {
+export const deleteTodo = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
   try {
     const { id } = req.params;
-    const deleteTdo = await Todo.findByIdAndDelete(id);
+
+    // ✅ SENIOR APPROACH: Type-safe access with null check
+    if (!req.userId) {
+      res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
+
+    // Only allow users to delete their own todos
+    const deleteTdo = await Todo.findOneAndDelete({
+      _id: id,
+      createdBy: req.userId,
+    });
+
+    if (!deleteTdo) {
+      res.status(404).json({ message: "Todo not found or unauthorized" });
+      return;
+    }
+
     res.status(200).json({ message: "Deleted Todo", data: deleteTdo });
   } catch (error) {
     res.status(500).json({ message: error });
   }
 };
 
-export const getTodo = async (req: Request, res: Response) => {
+export const getTodo = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const single = await Todo.findById(id);
+
+    // ✅ SENIOR APPROACH: Type-safe access with null check
+    if (!req.userId) {
+      res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
+
+    // Only allow users to get their own todos
+    const single = await Todo.findOne({
+      _id: id,
+      createdBy: req.userId,
+    });
+
+    if (!single) {
+      res.status(404).json({ message: "Todo not found or unauthorized" });
+      return;
+    }
+
     res.status(200).json({ message: "Single Get", data: single });
   } catch (error) {
     res.status(500).json({ message: error });
   }
 };
 
-export const updateTodo = async (req: Request, res: Response) => {
+export const updateTodo = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
   try {
     const { id, todo, title } = req.body;
 
-    const single = await Todo.findByIdAndUpdate(id, { todo, title });
+    // ✅ SENIOR APPROACH: Type-safe access with null check
+    if (!req.userId) {
+      res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
+
+    // Only allow users to update their own todos
+    const single = await Todo.findOneAndUpdate(
+      { _id: id, createdBy: req.userId },
+      { todo, title },
+      { new: true } // Return updated document
+    );
+
+    if (!single) {
+      res.status(404).json({ message: "Todo not found or unauthorized" });
+      return;
+    }
+
+    // ✅ REDIS USE CASE: Invalidate cache when todo is updated
+    await TodoCacheService.invalidateUserTodos(req.userId);
+
     res.status(200).json({ message: "Update Todo", data: single });
   } catch (error) {
     res.status(500).json({ message: error });

@@ -239,7 +239,7 @@ const NoteList = () => {
         <button
           onClick={fetchNotes}
           disabled={loading}
-          className="flex items-center gap-2 px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium transition-colors disabled:opacity-50 hidden sm:block"
+          className="hidden sm:inline-flex items-center gap-2 px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium transition-colors disabled:opacity-50 whitespace-nowrap"
         >
           <svg
             className={`w-4 h-4 ${loading ? "animate-spin" : ""}`}
@@ -508,13 +508,13 @@ const NoteList = () => {
                 </div>
               );
             })}
-          <FloatingActionButton
-            onClick={() => {
-              setShowInput(!showInput);
-            }}
-          />
         </div>
       )}
+      <FloatingActionButton
+        onClick={() => {
+          setShowInput(!showInput);
+        }}
+      />
     </div>
   );
 };

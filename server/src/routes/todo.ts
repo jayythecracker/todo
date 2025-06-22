@@ -1,11 +1,31 @@
 import { Router } from "express";
-import { createTdo, deleteTodo, getAll, getTodo, updateTodo } from "../controllers/todo";
+import {
+  createTdo,
+  deleteTodo,
+  getAll,
+  getTodo,
+  updateTodo,
+} from "../controllers/todo";
+import { authenticate } from "../middlewares/auth";
+import { rateLimiters } from "../middlewares/rateLimit";
 
-const router =Router()
+const router = Router();
 
-router.post('/create',createTdo)
-router.get('/',getAll)
-router.delete('/:id',deleteTodo)
-router.get('/:id',getTodo)
-router.patch('/',updateTodo)
-export default router
+// ✅ REDIS USE CASE: Apply rate limiting to todo routes
+router.post(
+  "/create",
+  rateLimiters.todoCreation.middleware(),
+  authenticate,
+  createTdo
+);
+router.get("/", rateLimiters.general.middleware(), authenticate, getAll);
+router.delete(
+  "/:id",
+  rateLimiters.general.middleware(),
+  authenticate,
+  deleteTodo
+);
+router.get("/:id", rateLimiters.general.middleware(), authenticate, getTodo);
+router.patch("/", rateLimiters.general.middleware(), authenticate, updateTodo);
+
+export default router;

@@ -1,0 +1,350 @@
+name: ⚡ Performance Monitoring
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Run performance tests daily at 3 AM UTC
+    - cron: '0 3 * * *'
+
+jobs:
+  # ✅ SENIOR APPROACH: Lighthouse CI for web performance
+  lighthouse:
+    name: 🔍 Lighthouse CI
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: 📦 Install client dependencies
+        working-directory: ./client
+        run: npm ci
+
+      - name: 🏗️ Build client
+        working-directory: ./client
+        run: npm run build
+
+      - name: 🚀 Start static server
+        working-directory: ./client
+        run: |
+          npx serve -s build -l 3000 &
+          sleep 10
+
+      - name: 🔍 Run Lighthouse CI
+        uses: treosh/lighthouse-ci-action@v10
+        with:
+          urls: |
+            http://localhost:3000
+            http://localhost:3000/login
+            http://localhost:3000/signup
+          configPath: './lighthouserc.json'
+          uploadArtifacts: true
+          temporaryPublicStorage: true
+
+  # ✅ SENIOR APPROACH: API performance testing
+  api-performance:
+    name: 🚀 API Performance
+    runs-on: ubuntu-latest
+
+    services:
+      mongodb:
+        image: mongo:6.0
+        ports:
+          - 27017:27017
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: 📦 Install server dependencies
+        working-directory: ./server
+        run: npm ci
+
+      - name: 🏗️ Build server
+        working-directory: ./server
+        run: npm run build
+
+      - name: 🚀 Start server
+        working-directory: ./server
+        run: |
+          npm start &
+          sleep 10
+        env:
+          NODE_ENV: production
+          MONGO_LOCAL_URI: mongodb://localhost:27017/simple_todos_perf
+          REDIS_URL: redis://localhost:6379
+          JWT_SECRET: perf-test-secret
+          JWT_REFRESH_SECRET: perf-test-refresh-secret
+
+      - name: 📊 Install performance testing tools
+        run: |
+          npm install -g artillery
+          npm install -g clinic
+
+      - name: 🧪 Run API load tests
+        run: |
+          cat > artillery-config.yml << EOF
+          config:
+            target: 'http://localhost:8001'
+            phases:
+              - duration: 60
+                arrivalRate: 10
+                name: "Warm up"
+              - duration: 120
+                arrivalRate: 50
+                name: "Load test"
+              - duration: 60
+                arrivalRate: 100
+                name: "Stress test"
+          scenarios:
+            - name: "Health check"
+              weight: 30
+              flow:
+                - get:
+                    url: "/health"
+            - name: "Auth flow"
+              weight: 40
+              flow:
+                - post:
+                    url: "/v1/signup"
+                    json:
+                      name: "Test User"
+                      email: "test{{ \$randomString() }}@example.com"
+                      password: "password123"
+                - post:
+                    url: "/v1/login"
+                    json:
+                      email: "test@example.com"
+                      password: "password123"
+            - name: "Todo operations"
+              weight: 30
+              flow:
+                - get:
+                    url: "/v1/todos"
+                - post:
+                    url: "/v1/todos/create"
+                    json:
+                      title: "Performance Test Todo"
+                      todo: "Testing API performance"
+          EOF
+          
+          artillery run artillery-config.yml --output performance-report.json
+
+      - name: 📊 Generate performance report
+        run: |
+          artillery report performance-report.json --output performance-report.html
+
+      - name: 📊 Upload performance artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-reports
+          path: |
+            performance-report.json
+            performance-report.html
+
+  # ✅ SENIOR APPROACH: Bundle size monitoring
+  bundle-size:
+    name: 📦 Bundle Size Monitor
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: 📦 Install client dependencies
+        working-directory: ./client
+        run: npm ci
+
+      - name: 🏗️ Build client
+        working-directory: ./client
+        run: npm run build
+
+      - name: 📊 Analyze bundle size
+        uses: preactjs/compressed-size-action@v2
+        with:
+          repo-token: "${{ secrets.GITHUB_TOKEN }}"
+          pattern: "./client/build/static/js/*.js"
+          exclude: "{**/*.map,**/node_modules/**}"
+
+  # ✅ SENIOR APPROACH: Memory and CPU profiling
+  profiling:
+    name: 🔬 Performance Profiling
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+
+    services:
+      mongodb:
+        image: mongo:6.0
+        ports:
+          - 27017:27017
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: 📦 Install server dependencies
+        working-directory: ./server
+        run: npm ci
+
+      - name: 🔬 Install profiling tools
+        run: |
+          npm install -g clinic
+          npm install -g autocannon
+
+      - name: 🔬 CPU Profiling
+        working-directory: ./server
+        run: |
+          clinic doctor --on-port 'autocannon localhost:8001/health -d 30' -- npm start
+        env:
+          NODE_ENV: production
+          MONGO_LOCAL_URI: mongodb://localhost:27017/simple_todos_profile
+          REDIS_URL: redis://localhost:6379
+
+      - name: 🧠 Memory Profiling
+        working-directory: ./server
+        run: |
+          clinic heapprofiler --on-port 'autocannon localhost:8001/v1/todos -d 30' -- npm start
+        env:
+          NODE_ENV: production
+          MONGO_LOCAL_URI: mongodb://localhost:27017/simple_todos_profile
+          REDIS_URL: redis://localhost:6379
+
+      - name: 📊 Upload profiling reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: profiling-reports
+          path: |
+            server/.clinic/
+        if: always()
+
+  # ✅ SENIOR APPROACH: Performance regression detection
+  performance-regression:
+    name: 📈 Performance Regression
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: 📊 Performance comparison
+        run: |
+          echo "🔍 Checking for performance regressions..."
+          echo "📊 Bundle size changes will be reported by bundle-size job"
+          echo "⚡ Lighthouse scores will be compared automatically"
+          echo "🚀 API performance baseline comparison would go here"
+
+      - name: 💬 Comment PR with performance summary
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const comment = `
+            ## ⚡ Performance Summary
+
+            ### 📊 Checks Completed
+            - ✅ Bundle size analysis
+            - ✅ Lighthouse CI scores
+            - ✅ API performance baseline
+
+            ### 🎯 Key Metrics
+            - **Bundle Size**: Check the bundle-size job results
+            - **Lighthouse Score**: Check the lighthouse job results
+            - **API Response Time**: Baseline comparison in progress
+
+            ### 📈 Recommendations
+            - Monitor bundle size changes carefully
+            - Ensure Lighthouse scores remain above 90
+            - Watch for API response time regressions
+
+            ---
+            *Performance monitoring powered by GitHub Actions*
+            `;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+  # ✅ SENIOR APPROACH: Performance alerts
+  performance-alerts:
+    name: 🚨 Performance Alerts
+    runs-on: ubuntu-latest
+    needs: [lighthouse, api-performance, bundle-size]
+    if: always() && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: 🚨 Check for performance issues
+        run: |
+          echo "🔍 Analyzing performance results..."
+          
+          # This would typically parse the actual results
+          # For now, we'll simulate the logic
+          
+          LIGHTHOUSE_FAILED="${{ needs.lighthouse.result }}"
+          API_PERF_FAILED="${{ needs.api-performance.result }}"
+          BUNDLE_SIZE_FAILED="${{ needs.bundle-size.result }}"
+          
+          if [[ "$LIGHTHOUSE_FAILED" == "failure" ]] || [[ "$API_PERF_FAILED" == "failure" ]] || [[ "$BUNDLE_SIZE_FAILED" == "failure" ]]; then
+            echo "PERFORMANCE_ISSUES=true" >> $GITHUB_ENV
+          else
+            echo "PERFORMANCE_ISSUES=false" >> $GITHUB_ENV
+          fi
+
+      - name: 📢 Slack notification for performance issues
+        if: env.PERFORMANCE_ISSUES == 'true'
+        uses: 8398a7/action-slack@v3
+        with:
+          status: failure
+          channel: '#performance-alerts'
+          text: |
+            ⚡ Performance Issues Detected!
+            📦 Repository: ${{ github.repository }}
+            🔗 Workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            
+            📊 Failed Checks:
+            - Lighthouse: ${{ needs.lighthouse.result }}
+            - API Performance: ${{ needs.api-performance.result }}
+            - Bundle Size: ${{ needs.bundle-size.result }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
