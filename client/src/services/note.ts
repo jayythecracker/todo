@@ -20,9 +20,10 @@ export const createNote = async (noteData: {
   todo: string;
 }): Promise<Note> => {
   try {
+    console.log("Creating note with data:", noteData);
     const response = await authApi.post("/todos/create", noteData);
     console.log("Note created:", response.data);
-    return response.data; // Return the created note
+    return response.data.data; // Return the actual note from the nested data structure
   } catch (error) {
     console.error("Error creating note:", error);
     throw error;
@@ -32,7 +33,9 @@ export const createNote = async (noteData: {
 export const deleteNote = async (id: string): Promise<Note> => {
   try {
     const response = await authApi.delete(`/todos/${id}`);
-    return response.data;
+    console.log("Delete response:", response.data);
+    // Check if response has nested data structure
+    return response.data.data || response.data;
   } catch (error) {
     console.error("Error deleting note:", error);
     throw error;
@@ -46,7 +49,9 @@ export const updateTodo = async (noteData: {
 }): Promise<Note> => {
   try {
     const response = await authApi.patch("/todos/", noteData);
-    return response.data;
+    console.log("Update response:", response.data);
+    // Check if response has nested data structure
+    return response.data.data || response.data;
   } catch (error) {
     console.error("Error updating note:", error);
     throw error;

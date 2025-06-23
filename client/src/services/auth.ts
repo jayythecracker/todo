@@ -148,8 +148,8 @@ export class AuthService {
   // Get current user profile
   static async getProfile(): Promise<User> {
     try {
-      const response = await authApi.get("/me");
-      return response.data.user || response.data;
+      const response = await authApi.post("/me");
+      return response.data.data || response.data;
     } catch (error: any) {
       throw new Error(error.response?.data?.message || "Failed to get profile");
     }

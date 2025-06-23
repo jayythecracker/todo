@@ -54,17 +54,13 @@ export const getAll = asyncHandler(
   }
 );
 
-export const deleteTodo = async (
-  req: Request,
-  res: Response
-): Promise<void> => {
-  try {
+export const deleteTodo = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
     const { id } = req.params;
 
     // ✅ SENIOR APPROACH: Type-safe access with null check
     if (!req.userId) {
-      res.status(401).json({ message: "Unauthorized" });
-      return;
+      throw new AuthenticationError("Authentication required");
     }
 
     // Only allow users to delete their own todos
@@ -74,24 +70,20 @@ export const deleteTodo = async (
     });
 
     if (!deleteTdo) {
-      res.status(404).json({ message: "Todo not found or unauthorized" });
-      return;
+      throw new NotFoundError("Todo not found or unauthorized");
     }
 
     res.status(200).json({ message: "Deleted Todo", data: deleteTdo });
-  } catch (error) {
-    res.status(500).json({ message: error });
   }
-};
+);
 
-export const getTodo = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getTodo = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
     const { id } = req.params;
 
     // ✅ SENIOR APPROACH: Type-safe access with null check
     if (!req.userId) {
-      res.status(401).json({ message: "Unauthorized" });
-      return;
+      throw new AuthenticationError("Authentication required");
     }
 
     // Only allow users to get their own todos
@@ -101,27 +93,20 @@ export const getTodo = async (req: Request, res: Response): Promise<void> => {
     });
 
     if (!single) {
-      res.status(404).json({ message: "Todo not found or unauthorized" });
-      return;
+      throw new NotFoundError("Todo not found or unauthorized");
     }
 
     res.status(200).json({ message: "Single Get", data: single });
-  } catch (error) {
-    res.status(500).json({ message: error });
   }
-};
+);
 
-export const updateTodo = async (
-  req: Request,
-  res: Response
-): Promise<void> => {
-  try {
+export const updateTodo = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
     const { id, todo, title } = req.body;
 
     // ✅ SENIOR APPROACH: Type-safe access with null check
     if (!req.userId) {
-      res.status(401).json({ message: "Unauthorized" });
-      return;
+      throw new AuthenticationError("Authentication required");
     }
 
     // Only allow users to update their own todos
@@ -132,15 +117,12 @@ export const updateTodo = async (
     );
 
     if (!single) {
-      res.status(404).json({ message: "Todo not found or unauthorized" });
-      return;
+      throw new NotFoundError("Todo not found or unauthorized");
     }
 
     // ✅ REDIS USE CASE: Invalidate cache when todo is updated
     await TodoCacheService.invalidateUserTodos(req.userId);
 
     res.status(200).json({ message: "Update Todo", data: single });
-  } catch (error) {
-    res.status(500).json({ message: error });
   }
-};
+);
