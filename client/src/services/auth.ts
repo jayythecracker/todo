@@ -1,7 +1,7 @@
 import axios from "axios";
 
 // Configure axios for authentication
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8001";
 
 // Token storage utilities
 export class TokenStorage {
@@ -148,8 +148,8 @@ export class AuthService {
   // Get current user profile
   static async getProfile(): Promise<User> {
     try {
-      const response = await authApi.post("/me");
-      return response.data.data || response.data;
+      const response = await authApi.get("/me");
+      return response.data.user || response.data.data || response.data;
     } catch (error: any) {
       throw new Error(error.response?.data?.message || "Failed to get profile");
     }
@@ -237,16 +237,14 @@ authApi.interceptors.response.use(
           }
           return authApi(originalRequest);
         } catch (refreshError) {
-          console.log("🔒 Token refresh failed, redirecting to login");
+          console.log("🔒 Token refresh failed, clearing tokens");
           TokenStorage.clearTokens();
-          window.location.href = "/login";
           return Promise.reject(refreshError);
         }
       } else if (errorCode === "SESSION_EXPIRED" || errorCode === "NO_TOKEN") {
-        // Session truly expired, redirect to login
-        console.log("🔒 Session expired, redirecting to login");
+        // Session truly expired, clear tokens
+        console.log("🔒 Session expired, clearing tokens");
         TokenStorage.clearTokens();
-        window.location.href = "/login";
       }
     }
 

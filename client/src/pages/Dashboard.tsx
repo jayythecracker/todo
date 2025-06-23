@@ -1,17 +1,63 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { AuthService, type User } from "../services/auth";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { useAuth } from "../contexts/AuthContext";
 import { getNotes, createNote, deleteNote, updateTodo } from "../services/note";
 import type { Note } from "../types/note";
 
+// Zod schemas for form validation
+const createNoteSchema = z.object({
+  title: z
+    .string()
+    .min(1, "Title is required")
+    .max(100, "Title must be less than 100 characters"),
+  todo: z
+    .string()
+    .min(1, "Content is required")
+    .max(1000, "Content must be less than 1000 characters"),
+});
+
+const editNoteSchema = z.object({
+  title: z
+    .string()
+    .min(1, "Title is required")
+    .max(100, "Title must be less than 100 characters"),
+  todo: z
+    .string()
+    .min(1, "Content is required")
+    .max(1000, "Content must be less than 1000 characters"),
+});
+
+type CreateNoteFormData = z.infer<typeof createNoteSchema>;
+type EditNoteFormData = z.infer<typeof editNoteSchema>;
+
 const Dashboard: React.FC = () => {
-  const [user, setUser] = useState<User | null>(null);
+  const { user, logout } = useAuth();
   const [notes, setNotes] = useState<Note[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [newNote, setNewNote] = useState({ title: "", todo: "" });
   const [editingNote, setEditingNote] = useState<Note | null>(null);
   const navigate = useNavigate();
+
+  // React Hook Form for creating notes
+  const createForm = useForm<CreateNoteFormData>({
+    resolver: zodResolver(createNoteSchema),
+    defaultValues: {
+      title: "",
+      todo: "",
+    },
+  });
+
+  // React Hook Form for editing notes
+  const editForm = useForm<EditNoteFormData>({
+    resolver: zodResolver(editNoteSchema),
+    defaultValues: {
+      title: "",
+      todo: "",
+    },
+  });
 
   useEffect(() => {
     loadUserAndNotes();
@@ -20,11 +66,7 @@ const Dashboard: React.FC = () => {
   const loadUserAndNotes = async () => {
     try {
       setLoading(true);
-      const [userProfile, userNotes] = await Promise.all([
-        AuthService.getProfile(),
-        getNotes(),
-      ]);
-      setUser(userProfile);
+      const userNotes = await getNotes();
       setNotes(userNotes);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load data");
@@ -35,7 +77,7 @@ const Dashboard: React.FC = () => {
 
   const handleLogout = async () => {
     try {
-      await AuthService.logout();
+      await logout();
       navigate("/login");
     } catch (err) {
       console.error("Logout error:", err);
@@ -44,14 +86,11 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  const handleCreateNote = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newNote.title.trim() || !newNote.todo.trim()) return;
-
+  const handleCreateNote = async (data: CreateNoteFormData) => {
     try {
-      const createdNote = await createNote(newNote);
+      const createdNote = await createNote(data);
       setNotes((prev) => [createdNote, ...prev]);
-      setNewNote({ title: "", todo: "" });
+      createForm.reset(); // Reset form after successful submission
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create note");
     }
@@ -68,25 +107,35 @@ const Dashboard: React.FC = () => {
 
   const handleEditNote = (note: Note) => {
     setEditingNote(note);
+    // Populate the edit form with the note data
+    editForm.reset({
+      title: note.title,
+      todo: note.todo,
+    });
   };
 
-  const handleUpdateNote = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleUpdateNote = async (data: EditNoteFormData) => {
     if (!editingNote) return;
 
     try {
       const updatedNote = await updateTodo({
         id: editingNote._id,
-        title: editingNote.title,
-        todo: editingNote.todo,
+        title: data.title,
+        todo: data.todo,
       });
       setNotes((prev) =>
         prev.map((note) => (note._id === updatedNote._id ? updatedNote : note))
       );
       setEditingNote(null);
+      editForm.reset(); // Reset form after successful update
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update note");
     }
+  };
+
+  const handleCancelEdit = () => {
+    setEditingNote(null);
+    editForm.reset(); // Reset form when canceling
   };
 
   if (loading) {
@@ -96,7 +145,6 @@ const Dashboard: React.FC = () => {
       </div>
     );
   }
-  console.log(user);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -140,34 +188,52 @@ const Dashboard: React.FC = () => {
           <h2 className="text-lg font-medium text-gray-900 mb-4">
             Create New Note
           </h2>
-          <form onSubmit={handleCreateNote} className="space-y-4">
+          <form
+            onSubmit={createForm.handleSubmit(handleCreateNote)}
+            className="space-y-4"
+          >
             <div>
               <input
                 type="text"
                 placeholder="Note title..."
-                value={newNote.title}
-                onChange={(e) =>
-                  setNewNote((prev) => ({ ...prev, title: e.target.value }))
-                }
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                {...createForm.register("title")}
+                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+                  createForm.formState.errors.title
+                    ? "border-red-500"
+                    : "border-gray-300"
+                }`}
               />
+              {createForm.formState.errors.title && (
+                <p className="mt-1 text-sm text-red-600">
+                  {createForm.formState.errors.title.message}
+                </p>
+              )}
             </div>
             <div>
               <textarea
                 placeholder="Note content..."
-                value={newNote.todo}
-                onChange={(e) =>
-                  setNewNote((prev) => ({ ...prev, todo: e.target.value }))
-                }
                 rows={3}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                {...createForm.register("todo")}
+                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+                  createForm.formState.errors.todo
+                    ? "border-red-500"
+                    : "border-gray-300"
+                }`}
               />
+              {createForm.formState.errors.todo && (
+                <p className="mt-1 text-sm text-red-600">
+                  {createForm.formState.errors.todo.message}
+                </p>
+              )}
             </div>
             <button
               type="submit"
-              className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm font-medium"
+              disabled={createForm.formState.isSubmitting}
+              className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-4 py-2 rounded-md text-sm font-medium"
             >
-              Create Note
+              {createForm.formState.isSubmitting
+                ? "Creating..."
+                : "Create Note"}
             </button>
           </form>
         </div>
@@ -188,37 +254,55 @@ const Dashboard: React.FC = () => {
               notes.map((note) => (
                 <div key={note._id} className="px-6 py-4">
                   {editingNote?._id === note._id ? (
-                    <form onSubmit={handleUpdateNote} className="space-y-3">
-                      <input
-                        type="text"
-                        value={editingNote?.title || ""}
-                        onChange={(e) =>
-                          setEditingNote((prev) =>
-                            prev ? { ...prev, title: e.target.value } : null
-                          )
-                        }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      />
-                      <textarea
-                        value={editingNote?.todo || ""}
-                        onChange={(e) =>
-                          setEditingNote((prev) =>
-                            prev ? { ...prev, todo: e.target.value } : null
-                          )
-                        }
-                        rows={3}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      />
+                    <form
+                      onSubmit={editForm.handleSubmit(handleUpdateNote)}
+                      className="space-y-3"
+                    >
+                      <div>
+                        <input
+                          type="text"
+                          {...editForm.register("title")}
+                          className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+                            editForm.formState.errors.title
+                              ? "border-red-500"
+                              : "border-gray-300"
+                          }`}
+                        />
+                        {editForm.formState.errors.title && (
+                          <p className="mt-1 text-sm text-red-600">
+                            {editForm.formState.errors.title.message}
+                          </p>
+                        )}
+                      </div>
+                      <div>
+                        <textarea
+                          rows={3}
+                          {...editForm.register("todo")}
+                          className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+                            editForm.formState.errors.todo
+                              ? "border-red-500"
+                              : "border-gray-300"
+                          }`}
+                        />
+                        {editForm.formState.errors.todo && (
+                          <p className="mt-1 text-sm text-red-600">
+                            {editForm.formState.errors.todo.message}
+                          </p>
+                        )}
+                      </div>
                       <div className="flex space-x-2">
                         <button
                           type="submit"
-                          className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm"
+                          disabled={editForm.formState.isSubmitting}
+                          className="bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white px-3 py-1 rounded text-sm"
                         >
-                          Save
+                          {editForm.formState.isSubmitting
+                            ? "Saving..."
+                            : "Save"}
                         </button>
                         <button
                           type="button"
-                          onClick={() => setEditingNote(null)}
+                          onClick={handleCancelEdit}
                           className="bg-gray-600 hover:bg-gray-700 text-white px-3 py-1 rounded text-sm"
                         >
                           Cancel
